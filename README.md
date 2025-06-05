@@ -28,3 +28,13 @@ docker run --rm -it -v "$(pwd)":/workspaces -w /workspaces fconti/unitn25-qnn
 4. The Docker terminal that is opened will contain an already configured workspace. The lab folder will be mounted under `/workspaces`.
 
 ## Installing 
+First of all, make sure all submodules are properly initialized:
+```
+git submodule update --init --recursive
+```
+After that, install Deeploy and DeepQuant:
+```
+cd Deeploy && pip install -e . && cd ..
+cd DeepQuant && pip install -e . && cd ..
+```
+We use an editable install to allow (if necessary or desired) to modify the tools.
