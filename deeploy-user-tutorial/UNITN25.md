@@ -12,10 +12,6 @@ Main author: *Victor J.B Jung* <br>
 
 ## Check installation
 
-<!-- A Singularity container file (extension .sif) with Deeploy and its dependencies has been installed on the system; Build the sandbox container with `singularity build --sandbox /scratch/$USER/DeeployContainer/ /home/soc_042fs25/deeploy-container-socdaml.sif`
-
-Then you can find Deeploy's source code in `/scratch/$USER/DeeployContainer/app/Deeploy`. To spawn a shell from the container, from your home, run `singularity shell --writable --cleanenv --contain /scratch/$USER/DeeployContainer/`. Then you can navigate to the `DeeployTest` folder with `cd /app/Deeploy/DeeployTest`. -->
-
 From the `DeeployTest` folder, you can use the `testRunner` to compile ONNXs and execute the output code using the appropriate simulators.
 
 To validate your installation, you can run a simple Add node on each platform:
@@ -120,16 +116,6 @@ Now that you understand the hardware and the kind of workload we want to execute
 
 *Hint:* `python testRunner_siracusa.py --help` will list and explain the available flags.
 
-<details>
- <summary><span style="font-weight: bold; font-size: 1.3em;">Solution</span></summary>
-
- > If you run `python testRunner_siracusa.py -t Tests/microLlama/microLlama128 --cores=1` and then `python testRunner_siracusa.py -t Tests/microLlama/microLlama128 --cores=8`, you should measure a runtime of ~16,1M cycles for 1 core and 3.1M cycles for 8 cores.
- >
- > The speedup ratio is obtained via $\frac{\text{Runtime 1 cores}}{\text{Runtime 8 cores}} = 5.2$. Hence, using 8 cores instead of 1 leads to a 5.2 times speedup.
- >
- > So why is the speedup ratio below 8? Mostly because all data movement is not overlapped with computation. Additionally, some kernels are probably not optimally parallelized for this specific network.
-</details>
-
 ### Tiling Basics
 
 It's due time to talk about data movement now! We use all 8 cluster cores, which is great, but where do these cores fetch the data from? By default, when using `testRunner_siracusa.py`, all data is in L2; there is no tiling, and cores read and write data directly to/from L2. As the L2 memory is "further away" from the cluster, load/store takes several cycles, which is non-optimal.
@@ -141,17 +127,6 @@ The good news is that Deeploy can already do that! So, let's generate and run so
 > ✅ **Task:** Get familiar with the CLI arguments of `testRunner_tiled_siracusa.py`, then run `microLlama64_parallel` with different configurations. Find one "bad" and one "good" configuration, and explain why.
 
 *Hint:* Use the `--help` flag to list and explain the available flags.
-
-<details>
- <summary><span style="font-weight: bold; font-size: 1.3em;">Solution</span></summary>
-
- > Bad configuration: `python testRunner_tiled_siracusa.py -t Tests/microLlama/microLlama64_parallel --cores=8 --l1 8000 --defaultMemLevel=L2` -> Runtime: 47.5 MCycles
- >
- > Good configuration `python testRunner_tiled_siracusa.py -t Tests/microLlama/microLlama64_parallel --cores=8 --l1 64000 --defaultMemLevel=L2`: -> Runtime: 35.3 MCycles
- >
- > Justification: As the size of the L1 memory gets smaller, tiles also get smaller and smaller. Smaller tiles usually mean that it's harder to keep the core properly utilized.
-
-</details>
 
 ### Profiling the Execution
 
@@ -176,56 +151,14 @@ To use the NPU, you can use the `testRunner_tiled_siracusa_w_neureka.py`. The Li
 
 > ✅ **Task:** Why does the NPU bring more speedup in parallel mode than in autoregressive mode?
 
-<details>
- <summary><span style="font-weight: bold; font-size: 1.3em;">Solution</span></summary>
-
- > The runtime in parallel mode with NPU is obtained with:
- >
- >`
- python testRunner_tiled_siracusa_w_neureka.py -t Tests/microLlama/microLlama64_parallel --cores=8 --l1 64000 --defaultMemLevel=L2 
- `
- >
- > And returns 28.6 MCycles of runtime. The runtime without NPU was measured above and is 35.3 MCycles. Hence, the speedup is ~1.23 times. 
- >
- > We apply the same methodology on `microLlama64` and get a speedup of ~1.04 times.
- >
- > Now, why is the speedup lesser in autoregressive mode compared to parallel mode? This is because the parallel mode is composed mainly of GEMM, while the autoregressive mode uses GEMV. With GEMV, the accelerator is underutilized as the [operational intensity](https://spcl.inf.ethz.ch/Teaching/2013-dphpc/lecture9-6up.pdf) of GEMV is very low, especially compared to GEMM.
- >
- > Additionally, in autoregressive mode (unlike in parallel mode), you have to load the KV cache, which requires lots of data movement not accelerated by the NPU.
-
-</details>
 <br>
 
 > ✅ **Task:** Benchmark the effect of the NMS on the model runtime and at the layer level. Do you notice any speedup? If yes, where does it come from?
 
-<details>
- <summary><span style="font-weight: bold; font-size: 1.3em;">Solution</span></summary>
-
- > Using the NMS brings the runtime from 857 to 780 KCycles for the autoregressive mode and from 28.6 to 28.3 MCycles for the parallel mode. By inspecting the trace, you can notice that the NMS drastically reduces the time spent on input DMA transfers for the layers offloaded to the NPU.
- >
- > This is the profiling trace for a layer without using the NMS:
- ```
- [RequantizedPwConv_L2][SB][32771 ops][Tile 0] Input DMA took 2037 cycles
- [RequantizedPwConv_L2][SB][32771 ops][Tile 0] Kernel took 2649 cycles
- [RequantizedPwConv_L2][SB][32771 ops][Tile 0] Output DMA took 50 cycles
- ```
- > And this is with the NMS activated:
- ```
- [RequantizedPwConv_L2][SB][32771 ops][Tile 0] Input DMA took 125 cycles
- [RequantizedPwConv_L2][SB][32771 ops][Tile 0] Kernel took 2595 cycles
- [RequantizedPwConv_L2][SB][32771 ops][Tile 0] Output DMA took 56 cycles
- ```
-</details>
 <br>
 
 > ✅ **Task:** Why does the autoregressive mode benefit more from the NMS than the parallel mode?
 
-<details>
- <summary><span style="font-weight: bold; font-size: 1.3em;">Solution</span></summary>
-
- > Using the NMS relaxes the memory boundness of the NPU. In the GEMM, we are not in a memory-bound regime, and the DMA transfer overhead is negligible with regard to the total runtime. In the autoregressive mode, we spend a lot of time on DMA transfers; hence, providing more bandwidth to the accelerator is very beneficial.
-
-</details>
 <br>
 
 Et voilà, this is the end of the tutorial. Thank you for following it until the end. If you are interested in learning more about Deeploy or the SoCs we develop at the [PULP Platform](https://pulp-platform.org/), please reach out!
