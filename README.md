@@ -38,3 +38,9 @@ cd Deeploy && pip install -e . && cd ..
 cd DeepQuant && pip install -e . && cd ..
 ```
 We use an editable install to allow (if necessary or desired) to modify the tools.
+
+## Tutorials
+There are three tutorials available here:
+ 1. `brevitas-deepquant-tutorial`: shows how to go from the training of a DNN (using a simple Fashion-MNIST example) down to a deployable format
+ 2. `deeploy-user-tutorial`: this tutorial introduces Deeploy and how to use it, and understand what it does internally
+ 3. `deeploy-newop-tutorial`: this (advanced) tutorial on Deeploy introduces how to add a new modified operator to the tool
