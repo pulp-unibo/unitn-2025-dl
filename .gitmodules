@@ -9,3 +9,6 @@
 	path = DeepQuant
 	url = https://github.com/FrancescoConti/DeepQuant
 	branch = unitn25-exercise
+[submodule "SOLUTIONS"]
+	path = SOLUTIONS
+	url = https://github.com/pulp-unibo/unitn-2025-dl-solutions
